@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Video Entity Similarity</title>
+        <style>
+            body {
+                font-family: 'Arial', sans-serif;
+                margin: 20px;
+                background-color: #f4f4f4;
+            }
+
+            #control-section {
+                display: flex;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+
+            #control-section select,
+            #control-section input,
+            #control-section button {
+                margin-right: 10px;
+            }
+
+            .carousel {
+                position: relative;
+                width: 600px;
+                height: 400px;
+                border: 1px solid #ccc;
+                background-color: #fff;
+                overflow: hidden;
+                margin: 20px auto;
+            }
+
+            .carousel-items {
+                width: 100%;
+                height: 100%;
+                position: relative;
+            }
+
+            .carousel-items img {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+
+            input {
+                padding: 10px 15px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                transition: border-color 0.3s ease;
+                width: 400px;
+            }
+
+            button, select {
+                background-color: #007BFF;
+                color: #fff;
+                border: none;
+                padding: 10px 15px;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: background-color 0.3s ease;
+            }
+
+            button:hover {
+                background-color: #0056b3;
+            }
+
+            .carousel button {
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 2;
+            }
+
+            .carousel #prevButton {
+                left: 10px;
+            }
+
+            .carousel #nextButton {
+                right: 10px;
+            }
+
+            #explanation {
+                background-color: #fff;
+                padding: 20px;
+                border: 1px solid #ccc;
+                margin-top: 20px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="control-section">
+            <select id="clusterSelect"></select>
+            <input type="text" id="explanationPrompt" placeholder="Enter your custom explanation prompt here..." />
+            <button id="explainButton">Explain</button>
+        </div>
+        <div id="content"></div>
+        <div id="explanation"></div>
+        <script>
+            window.onload = function () {
+                let explainButton = document.getElementById('explainButton');
+                explainButton.addEventListener('click', function () {
+                    let cluster = document.getElementById('clusterSelect').value;
+                    let prompt = document.getElementById('explanationPrompt').value;
+
+                    // Using POST request to send data
+                    fetch(`/api/explain`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                cluster: cluster,
+                                prompt: prompt
+                            })
+                        })
+                        .then((response) => response.json())
+                        .then((explanation) => {
+                            let explanationDiv = document.getElementById('explanation');
+                            explanationDiv.textContent = explanation.message;
+                        });
+                });
+
+                let clusters = {};
+                fetch('/api/entities')
+                    .then((response) => response.json())
+                    .then((entities) => {
+                        entities.embeddings.forEach((embedding, i) => {
+                            if (embedding.cluster in clusters) {
+                                clusters[embedding.cluster].push(embedding);
+                            } else {
+                                clusters[embedding.cluster] = [embedding];
+                            }
+                        })
+
+                        let clusterSelect = document.getElementById('clusterSelect');
+                        Object.keys(clusters).forEach((cluster) => {
+                            let option = document.createElement('option');
+                            option.value = cluster;
+                            option.textContent = 'Cluster ' + cluster;
+                            clusterSelect.appendChild(option);
+                        })
+
+                        clusterSelect.addEventListener('change', function() {
+                            let content = document.getElementById('content');
+                            content.innerHTML = '';
+                            let cluster = this.value;
+
+                            let clusterDiv = document.createElement('div');
+                            let clusterTitle = document.createElement('h2');
+                            clusterTitle.textContent = 'Cluster ' + cluster;
+                            clusterDiv.appendChild(clusterTitle);
+
+                            let carouselContainer = document.createElement('div');
+                            carouselContainer.className = 'carousel';
+
+                            let carouselItems = document.createElement('div');
+                            carouselItems.className = 'carousel-items';
+
+                            let currentIndex = 0;
+
+                            let items = clusters[cluster].map((embedding) => 
+                                embedding.image.replace(
+                                    "gs://YOUR BUCKET HERE/JaneGoodall/",
+                                    "/static/images/"
+                                ));
+
+                            let img = document.createElement('img');
+                            img.src = items[currentIndex];
+                            img.style.display = 'block';
+                            carouselItems.appendChild(img);
+
+                            let prevButton = document.createElement('button');
+                            prevButton.id = 'prevButton';
+                            prevButton.textContent = '←';
+                            prevButton.addEventListener('click', () => {
+                                img.src = items[(currentIndex - 1 + items.length) % items.length];
+                                currentIndex = (currentIndex - 1 + items.length) % items.length;
+                            });
+
+                            let nextButton = document.createElement('button');
+                            nextButton.id = 'nextButton';
+                            nextButton.textContent = '→';
+                            nextButton.addEventListener('click', () => {
+                                img.src = items[(currentIndex + 1) % items.length];
+                                currentIndex = (currentIndex + 1) % items.length;
+                            });
+
+                            carouselContainer.appendChild(carouselItems);
+                            carouselContainer.appendChild(prevButton);
+                            carouselContainer.appendChild(nextButton);
+
+                            clusterDiv.appendChild(carouselContainer);
+                            content.appendChild(clusterDiv);
+                        })
+
+                        if (clusterSelect.options.length > 0) {
+                            clusterSelect.dispatchEvent(new Event('change'));
+                        }
+                    });
+            };
+        </script>
+    </body>
+</html>
